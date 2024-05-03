@@ -1,0 +1,125 @@
+from flask import Flask, request, render_template_string
+
+app = Flask(__name__)
+
+# HTML Template com CSS
+HTML_TEMPLATE = '''
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Apostas</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        .calculator { margin-top: 20px; }
+        h1, h2 { color: #333; }
+        form { margin-bottom: 20px; }
+        input[type=number], input[type=text] { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        input[type=submit] { background-color: #007bff; color: white; padding: 10px 24px; border: none; border-radius: 4px; cursor: pointer; }
+        input[type=submit]:hover { background-color: #0056b3; }
+        .result-box { padding: 10px; background-color: #dff0d8; border: 1px solid #d6e9c6; color: #3c763d; border-radius: 4px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Calculadoras de Apostas</h1>
+
+        <!-- Primeira Calculadora -->
+        <div class="calculator">
+            <h2>Calculadora de Meta de Lucro</h2>
+            <form method="post" action="#calc1">
+                Banca inicial: <input type="number" step="any" name="banca_inicial" required><br>
+                Banca desejada: <input type="number" step="any" name="banca_desejada" required><br>
+                Odd para a próxima aposta: <input type="number" step="any" name="odd_proxima_aposta" required><br>
+                <input type="submit" value="Calcular">
+            </form>
+            {% if valor_aposta_necessario1 %}
+                <div class="result-box">
+                    <p>Para alcançar uma banca de {{ banca_desejada1 }} euros, você deve apostar <strong>{{ valor_aposta_necessario1 }}</strong> euros na próxima aposta com a odd de {{ odd_proxima_aposta1 }}.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Segunda Calculadora -->
+        <div class="calculator">
+            <h2>Calculadora de Recuperação de Perdas</h2>
+            <form method="post" action="#calc2">
+                Valor Perdido: <input type="number" step="any" name="valor_perdido" required><br>
+                Odd para a próxima aposta: <input type="number" step="any" name="odd_proxima_aposta2" required><br>
+                <input type="submit" value="Calcular">
+            </form>
+            {% if valor_aposta_necessario2 %}
+                <div class="result-box">
+                    <p>Para recuperar um valor perdido de {{ valor_perdido2 }} euros, você deve apostar <strong>{{ valor_aposta_necessario2 }}</strong> euros na próxima aposta com a odd de {{ odd_proxima_aposta2 }}.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
+'''
+
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    valor_aposta_necessario1 = None
+    valor_aposta_necessario2 = None
+    error_message = None  # Uma mensagem de erro geral para problemas de entrada
+
+    if request.method == 'POST':
+        try:
+            banca_inicial = float(request.form.get('banca_inicial', '0'))  # Usar get com default para evitar KeyError
+            banca_desejada = float(request.form.get('banca_desejada', '0'))
+            odd_proxima_aposta1 = float(request.form.get('odd_proxima_aposta', '0'))
+
+            if banca_inicial and banca_desejada and odd_proxima_aposta1:  # Verifica se todos os valores são válidos (não-zero)
+                valor_aposta_necessario1 = calcular_valor_aposta_para_meta_simplificado(banca_inicial, banca_desejada, odd_proxima_aposta1)
+                valor_aposta_necessario1 = f"{valor_aposta_necessario1:.2f}"
+            else:
+                error_message = "Por favor, insira todos os números corretamente."
+
+            valor_perdido2 = float(request.form.get('valor_perdido', '0'))
+            odd_proxima_aposta2 = float(request.form.get('odd_proxima_aposta2', '0'))
+
+            if valor_perdido2 and odd_proxima_aposta2:  # Verifica se os valores são válidos
+                valor_aposta_necessario2 = calcular_valor_aposta_para_meta_simplificado(0, valor_perdido2, odd_proxima_aposta2)
+                valor_aposta_necessario2 = f"{valor_aposta_necessario2:.2f}"
+            else:
+                error_message = "Por favor, insira todos os números corretamente."
+
+        except ValueError as e:
+            error_message = "Erro de entrada: Por favor, insira apenas números válidos."
+
+    return render_template_string(HTML_TEMPLATE, 
+                                  valor_aposta_necessario1=valor_aposta_necessario1,
+                                  banca_desejada1=request.form.get('banca_desejada', ''),
+                                  odd_proxima_aposta1=request.form.get('odd_proxima_aposta', ''),
+                                  valor_aposta_necessario2=valor_aposta_necessario2,
+                                  valor_perdido2=request.form.get('valor_perdido', ''),
+                                  odd_proxima_aposta2=request.form.get('odd_proxima_aposta2', ''),
+                                  error_message=error_message)
+def calcular_valor_aposta_para_meta_simplificado(banca_inicial, banca_desejada, odd):
+    """
+    Calcula o valor necessário para apostar para atingir uma banca desejada com uma determinada odd.
+
+    Args:
+    banca_inicial (float): o valor atual da banca
+    banca_desejada (float): o valor desejado da banca
+    odd (float): a odd da aposta
+
+    Returns:
+    float: o valor necessário para apostar para atingir a banca desejada
+    """
+    # Evitar divisão por zero e assegurar que a odd é maior que 1 para um cálculo válido
+    if odd <= 1:
+        raise ValueError("A odd deve ser maior que 1 para um cálculo válido.")
+    
+    # Cálculo do valor a apostar
+    ganho_necessario = banca_desejada - banca_inicial
+    valor_aposta_necessario = ganho_necessario / (odd - 1)
+    return max(0, valor_aposta_necessario)  # Evitar valores negativos
+
+
+if __name__ == '__main__':
+    app.run(port=5000, debug=True)
